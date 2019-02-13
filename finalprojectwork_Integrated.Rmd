@@ -1,0 +1,1175 @@
+---
+title: "Exercising Data Mining for Real Estate Investment"
+author: "Himangshu Pal"
+date: "February 8, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Step of project execution
+
+1. Data exploration
+
+2. Data cleaning
+
+3. Explore more
+
+4. Model Building
+
+    *      Predict price
+    *     Predict Location
+    *    Predict type of house 
+
+
+```{r}
+rm(list = ls())
+
+setwd("C:/Users/MANISHA/Desktop/CISC-Project/FinalProjectWork")
+
+## All required libraries should be mentioned here.
+
+library(ggplot2)
+
+library(caret)
+
+library(corrplot)
+
+library(rpart)
+
+library(Metrics)
+
+library(mlr)
+
+library(dummies)
+
+library(rpart)
+
+library(caret)
+
+library(randomForest)
+
+library(gbm)
+
+library(factoextra)
+
+library(tidyverse)
+
+library(gridExtra)
+
+################## Library Section Ends Here ####################
+
+```
+
+
+```{r}
+## Read input House Data file in csv format. 
+
+housedata = read.csv("house_data.csv", header = T)
+
+```
+
+```{r}
+## Dimension of the input data.
+
+dim(housedata)
+
+### 42703 observations. 
+### 20 attributes. 
+```
+```{r}
+
+## Structure of the file. 
+
+str(housedata)
+
+### We have categorical variables.  
+
+qualitative_var = c("stories", "num_bedrooms", "full_bathrooms", "half_bathrooms", "garage_type", "has_fireplace", "has_pool", 
+                    "has_central_heating", "has_central_cooling", "house_number", "street_name" , "unit_number", "city", "zip_code")
+
+### We have numerical variables. 
+quantitative_var = c("year_built", "livable_sqft", "total_sqft", "garage_sqft", "carport_sqft", "sale_price")
+
+### R has identified garage_type, street_number and city as factor. 
+### R has identified has_fireplace, has_pool, has_central_heating, has_central_cooling as boolean type. I will convert these four attributes to factor. 
+
+```
+
+```{r}
+
+## Sumamry statistics. 
+
+summary(housedata)
+
+### Few things about summary statistics. 
+### minimum livable_sqft = -3, minimum total_sqft = 5,  gagage_sqft minimum is -4, maximum is 8318, maximum carport_sqft is 9200, sale_price minimum is 626, maximum is more than 21 million. 
+
+### City and street_name labels are numric value. Good for PCA or regression but not good for classifications. I will have to factorize of these two variables. 
+
+### I can get rid of Zip code, unit number and house number as of now as those attributes do not have any direct need in the analysis. If I need to consolidate the address of house, I will use them. For now, I will not use them in regression, classification, clustering.
+
+dontneed = c("unit_number", "house_number", "zip_code")
+
+```
+
+```{r}
+## Create new data frame with the attributes I need for the analysis. 
+
+names(housedata)
+
+mydata = housedata[, -c(15,17,19)]
+
+dim(mydata)
+
+str(mydata)
+
+new_qualitative_var = c("stories", "num_bedrooms", "full_bathrooms", "half_bathrooms", "garage_type", "has_fireplace","has_pool", 
+          "has_central_heating", "has_central_cooling",  "street_name", "city")
+
+
+
+```
+
+```{r}
+## Convert boolean and categorical attributes into factor. 
+
+mydata[,new_qualitative_var] = lapply(mydata[, new_qualitative_var], factor)
+
+
+```
+
+
+```{r}
+## Missing values. 
+
+as.data.frame(colSums(is.na(mydata))) 
+
+### There is no missing values in any columns. 
+
+```
+
+```{r}
+## Outliers. 
+
+hist(mydata$sale_price, 
+     freq = FALSE,
+     breaks = 100,
+     col = "grey",
+     xlab = "Sale Price",
+     main = "Histogram, rug plot, density curve")
+rug(jitter(mydata$sale_price))
+lines(density(mydata$sale_price), col = "red", lwd = 1)
+box()
+
+boxplot(mydata$sale_price, horizontal = F, col = "dark grey", main = "Box Plot of Sales Price", varwidth = T)
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$stories)) +
+    geom_boxplot() +
+    xlab("Stories") +
+    ylab("Sale Price")
+    
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$num_bedrooms)) +
+    geom_boxplot() +
+    xlab("Number of Bedrooms") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$full_bathrooms)) +
+    geom_boxplot() +
+    xlab("Full Bathrooms") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$half_bathrooms)) +
+    geom_boxplot() +
+    xlab("Half Bathrooms") +
+    ylab("Sale Price")
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$garage_type)) +
+    geom_boxplot() +
+    xlab("Garage Type") +
+    ylab("Sale Price")
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$has_fireplace)) +
+    geom_boxplot() +
+    xlab("Has Fire Place") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$has_pool)) +
+    geom_boxplot() +
+    xlab("Has Pool") +
+    ylab("Sale Price")
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$has_central_heating)) +
+    geom_boxplot() +
+    xlab("Has Central Heating") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$has_central_cooling)) +
+    geom_boxplot() +
+    xlab("Has Central Cooling") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$year_built)) +
+    geom_point() +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    xlab("Built Year") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$livable_sqft)) +
+    geom_point() +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    xlab("Livable area") +
+    ylab("Sale Price")
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$total_sqft)) +
+    geom_point() +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    xlab("Total area") +
+    ylab("Sale Price")
+
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$garage_sqft)) +
+    geom_point() +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    xlab("Garage area") +
+    ylab("Sale Price")
+
+
+
+ggplot(mydata, 
+    aes_string(y = mydata$sale_price, x = mydata$carport_sqft)) +
+    geom_point() +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    xlab("Carport area") +
+    ylab("Sale Price")
+
+### Distribution of data 
+
+
+
+
+```
+
+```{r}
+
+### Count of house sales based on house built year.  
+countperyr_df = as.data.frame(table(as.factor(mydata$year_built)))
+
+countperyr_ordered = countperyr_df[order(countperyr_df$Freq, decreasing = T),]
+
+
+### Interested to see is it a very old house sells more of a house built recentyears. First 10 highest selling buil in year are from 1988 to 2016. 
+
+head(countperyr_ordered, 10)
+
+```
+
+```{r}
+### Chck variable one by one and remove outliear. 
+
+### sale_price has many outliers. 
+
+summary(mydata$sale_price)
+
+### Minimum price 626 and maximum price 21 million 
+
+### highest 30 sale price 
+
+#mydata[order(mydata$sale_price, decreasing = T), ][1:30,c(1,2,3,4,5,6,7,17)]
+
+### 1st one definately an error. livable_sqft 1446 and total_sqft = 1438, price 21million, definately an odd one. 
+### I will find out all observations where livable_sqft > total_sqft.
+
+odd_data = subset(mydata, mydata$livable_sqft>mydata$total_sqft)
+
+### Delete such records
+
+mydata = subset(mydata, !(mydata$livable_sqft>mydata$total_sqft))
+
+### Lowest 30 sale price
+
+#mydata[order(mydata$sale_price, decreasing = F), ][1:30,c(1,2,3,4,5,6,7,9, 17)]
+
+#subset(mydata, mydata$sale_price < 100000, c(1,2,3,4,5,6,7,9, 17))
+
+### Looks like there are many odd values in sale_price. For simplicity let's remove the outliers and store them for future reference.
+
+
+### Number of outliers in sales_price 
+
+outlier_values = boxplot.stats(mydata$sale_price)$out
+
+length(outlier_values)
+
+#Outlier range
+
+Q3 = quantile(mydata$sale_price)[4]
+Q1 = quantile(mydata$sale_price)[2]
+
+    
+# Q3 + IQR * 1.5
+
+maximum = Q3 + IQR(mydata$sale_price) * 1.5
+
+# Q1 - IQR * 1.5
+minimum = Q1 - IQR(mydata$sale_price) * 1.5
+
+#Maximum = 834758.8
+#Minimum = -47255.25
+
+### Remove ovservations related to outliers of sales_price 
+
+outlier_price = subset(mydata, mydata$sale_price < minimum | mydata$sale_price > maximum)
+
+odd_data = rbind(odd_data, outlier_price)
+
+### Remove observations related to outliers. 
+
+mydata = subset(mydata, !(mydata$sale_price < minimum | mydata$sale_price > maximum))
+
+
+hist(mydata$sale_price, 
+     freq = FALSE,
+     breaks = 100,
+     col = "grey",
+     xlab = "Sale Price",
+     main = "Histogram, rug plot, density curve")
+rug(jitter(mydata$sale_price))
+lines(density(mydata$sale_price), col = "red", lwd = 1)
+box()
+
+boxplot(mydata$sale_price, horizontal = F, col = "dark grey", main = "Box Plot of Sales Price")
+
+### Annomali reduction from sale price. 
+
+#Outlier range
+
+Q3 = quantile(mydata$sale_price)[4]
+Q1 = quantile(mydata$sale_price)[2]
+
+    
+# Q3 + IQR * 1.5
+
+maximum = Q3 + IQR(mydata$sale_price) * 1.5
+
+# Q1 - IQR * 1.5
+minimum = Q1 - IQR(mydata$sale_price) * 1.5
+
+#mydata[order(mydata$sale_price, decreasing = F),]
+
+temp_data = subset(mydata, mydata$sale_price < 25000 )
+
+mydata = subset(mydata, mydata$sale_price > 25000 )
+
+
+
+odd_data = rbind(odd_data, temp_data)
+
+summary(mydata)
+
+boxplot(mydata$sale_price)
+  
+```
+
+```{r}
+
+### Check summary of the data
+
+summary(mydata)
+
+### Plot continuous variables 
+
+ggplot(mydata, aes(x = " ", y = mydata$livable_sqft)) +
+    geom_boxplot(outlier.size = NA) +
+    geom_point() +
+    ylab("Livable Area") +
+    xlab("Box Plot of Livable Area")
+
+
+ggplot(mydata, aes(x = " ", y = mydata$total_sqft)) +
+    geom_boxplot(outlier.size = NA) +
+    geom_point() +
+    ylab("Total Area") +
+    xlab("Box Plot of Total Area")
+
+
+ggplot(mydata, aes(x = " ", y = mydata$garage_sqft)) +
+    geom_boxplot(outlier.size = NA) +
+    geom_point() +
+    ylab("Garage Area") +
+    xlab("Box Plot of Garage Area")
+
+
+ggplot(mydata, aes(x = " ", y = mydata$carport_sqft)) +
+    geom_boxplot(outlier.size = NA) +
+    geom_point() +
+    ylab("Carport Area") +
+    xlab("Box Plot of Carport Area")
+
+
+### Remove the observations realted to outliers for each variables and store them into odd-data dataframe. 
+
+#### livable_sqft
+
+summary(mydata$livable_sqft)
+
+Q1 = quantile(mydata$livable_sqft)[2]
+
+Q3 = quantile(mydata$livable_sqft)[4]
+
+maximum = Q3 + IQR(mydata$livable_sqft) * 1.5
+
+minimum = Q1 - IQR(mydata$livable_sqft) * 1.5
+
+odd_data = rbind(odd_data, subset(mydata, mydata$livable_sqft < minimum | mydata$livable_sqft > maximum))
+
+mydata = subset(mydata, !(mydata$livable_sqft < minimum | mydata$livable_sqft > maximum))
+
+#mydata[order(mydata$livable_sqft, decreasing = F), ]
+
+#### Remove negative values in livable_sqft
+
+odd_data = rbind(odd_data, subset(mydata, (mydata$livable_sqft < 0)))
+
+mydata = subset(mydata, !(mydata$livable_sqft < 0))
+
+
+#### total_sqft
+
+summary(mydata$total_sqft)
+
+Q1 = quantile(mydata$total_sqft)[2]
+
+Q3 = quantile(mydata$total_sqft)[4]
+
+maximum = Q3 + IQR(mydata$total_sqft) * 1.5
+
+minimum = Q1 - IQR(mydata$total_sqft) * 1.5
+
+odd_data = rbind(odd_data, subset(mydata, mydata$total_sqft < minimum | mydata$total_sqft > maximum))
+
+mydata = subset(mydata, !(mydata$total_sqft < minimum | mydata$total_sqft > maximum))
+
+#mydata[order(mydata$livable_sqft, decreasing = F), ]
+
+#### Remove negative values in livable_sqft
+
+#mydata[order(mydata$total_sqft<100, decreasing = T),]
+
+odd_data = rbind(odd_data, subset(mydata, (mydata$total_sqft <100)))
+
+mydata = subset(mydata, !(mydata$total_sqft < 100))
+
+
+#### garage_sqft
+
+summary(mydata$garage_sqft)
+
+ggplot(mydata, aes(x = mydata$garage_type, y = mydata$garage_sqft))+
+    geom_boxplot()
+
+
+Q1 = quantile(mydata$garage_sqft)[2]
+
+Q3 = quantile(mydata$garage_sqft)[4]
+
+maximum = Q3 + IQR(mydata$garage_sqft) * 1.5
+
+minimum = Q1 - IQR(mydata$garage_sqft) * 1.5
+
+odd_data = rbind(odd_data, subset(mydata, mydata$totgarage_sqft < minimum | mydata$garage_sqft > maximum))
+
+mydata = subset(mydata, !(mydata$garage_sqft < minimum | mydata$garage_sqft > maximum))
+
+#mydata[order(mydata$livable_sqft, decreasing = F), ]
+
+#### Remove negative values in livable_sqft
+
+#mydata[order(mydata$garage_sqft, decreasing = F),]
+
+odd_data = rbind(odd_data, subset(mydata, (mydata$garage_sqft <50)))
+
+mydata = subset(mydata, !(mydata$garage_sqft < 50))
+
+
+summary(mydata)
+
+
+
+
+```
+
+```{r}
+### Investigation of categorical data
+
+### stories
+
+table(mydata$stories)
+
+mydata[mydata$stories == 0,] ## May be an undergroung building. Odd one. 
+
+odd_data = rbind(odd_data, mydata[mydata$stories == 0,])
+
+mydata = mydata[!(mydata$stories == 0),]
+
+mydata$stories = factor(mydata$stories)
+
+### num_bedrooms
+
+table(mydata$num_bedrooms)
+
+mydata$num_bedrooms = factor(mydata$num_bedrooms)
+
+### Check 0 bedrooms houses. 
+table(mydata$num_bedrooms)
+
+odd_data = rbind(odd_data, subset(mydata, mydata$num_bedrooms == 0))
+
+mydata = subset(mydata, !(mydata$num_bedrooms == 0))
+
+mydata$num_bedrooms = factor(mydata$num_bedrooms)
+
+subset(mydata, mydata$num_bedrooms == 31)
+
+odd_data = rbind(odd_data, subset(mydata, mydata$num_bedrooms == 31))
+
+mydata = subset(mydata, !(mydata$num_bedrooms == 31))
+
+mydata$num_bedrooms = factor(mydata$num_bedrooms)
+
+subset(mydata, mydata$num_bedrooms %in% c(8:14))
+
+odd_data = rbind(odd_data, subset(mydata, mydata$num_bedrooms %in% c(8:14)))
+
+mydata = subset(mydata, !(mydata$num_bedrooms %in% c(8:14)))
+
+mydata$num_bedrooms = factor(mydata$num_bedrooms)
+
+
+
+### full_bathrooms
+
+table(mydata$full_bathrooms)
+
+subset(mydata, mydata$full_bathrooms == 0 & mydata$half_bathrooms == 0)
+subset(mydata, mydata$full_bathrooms == 0)
+subset(mydata, mydata$full_bathrooms == 5, select = c(full_bathrooms, half_bathrooms, total_sqft, sale_price))
+
+mydata$full_bathrooms = factor(mydata$full_bathrooms)
+
+### half_bathrooms
+
+table(mydata$half_bathrooms)
+
+### garage_type
+
+table(mydata$garage_type)
+
+mydata$garage_type = factor(mydata$garage_type)
+
+### has_fireplace
+
+table(mydata$has_fireplace)
+
+table(mydata$has_pool)
+
+table(mydata$has_central_heating)
+
+table(mydata$has_central_cooling)
+
+
+```
+
+```{r}
+### Data clean up is done.
+
+### I will check Multicollinearity  in the data. 
+
+## Corplot/Corrplotmatrix
+
+
+
+names(mydata)
+
+m = cor(mydata[quantitative_var])
+
+corrplot(m, method = "number", type = "lower")
+
+corrplot(m, order = "hclust", tl.srt = 30, tl.col = "black", addrect = 3, method = "number" )
+
+
+### sale_price has very low correlation with carport_sqft. So, I will remove carport_sqft.
+### total_sqft and livable_sqft highly correlated. I will remove livable_sqft. 
+
+names(mydata)
+mydata = mydata[,-c(6,10)]
+
+## How sale_price is correlated with categorical variables? 
+
+summary(aov(formula = sale_price ~ stories,data = mydata))
+summary(aov(formula = sale_price ~ num_bedrooms,data = mydata))
+summary(aov(formula = sale_price ~ full_bathrooms,data = mydata))
+summary(aov(formula = sale_price ~ half_bathrooms,data = mydata))
+summary(aov(formula = sale_price ~ garage_type,data = mydata))
+summary(aov(formula = sale_price ~ has_fireplace,data = mydata))
+summary(aov(formula = sale_price ~ has_pool,data = mydata))
+summary(aov(formula = sale_price ~ has_central_cooling,data = mydata))
+summary(aov(formula = sale_price ~ has_central_heating,data = mydata))
+#summary(aov(formula = sale_price ~ mydata$street_name,data = mydata))
+#summary(aov(formula = mydata$sale_price ~ mydata$city,data = mydata))
+
+```
+
+```{r}
+ 
+
+### Change factor levels to something greater than 0. 
+
+levels(mydata$has_fireplace) <- c(1,2)
+levels(mydata$has_pool) <- c(1,2)
+levels(mydata$has_central_heating) <- c(1,2)
+levels(mydata$has_central_cooling) <- c(1,2)
+levels(mydata$garage_type) <- c(1,2)
+
+
+
+```
+
+
+
+```{r}
+### Write final data set 
+
+write.csv(mydata, "houseprice_model.csv", row.names = F)
+
+write.csv(odd_data, "houseprice_odd_observations.csv", row.names = F)
+
+```
+
+```{r}
+
+# model - 
+### Price prediction
+### Classfication 1. Type of house, city
+### Clustering
+### Regression with PCA
+```
+
+
+```{r}
+## Define file name 
+
+filename = "houseprice_model.csv"
+
+
+## Load CSV file from local directory
+
+inputdata = read.csv(filename, header = T)
+
+```
+
+
+```{r}
+str(inputdata)
+
+categorical_var = c("stories", "num_bedrooms", "full_bathrooms", "half_bathrooms", "garage_type","has_fireplace","has_pool", "has_central_heating", "has_central_cooling")
+
+inputdata[,categorical_var] = lapply(inputdata[, categorical_var], factor)
+
+```
+
+```{r}
+dim(inputdata)
+
+names(inputdata)
+## 30915 observations and 15 attributes. 
+
+## Randomly select 20% of the data set for this analysis. 
+
+## I will go for validation set approach. 70% training set and 30% test set.
+
+
+## Normalize continuous variable using formula (x - min(x))/(max(x) - min(x))
+
+normalize = function(x) {
+    return((x - min(x))/(max(x) - min(x)))
+}
+
+
+workdata = inputdata[,-c(1,13,14)]
+
+#workdata <- scale(workdata, center = T, scale = T)
+```
+
+```{r}
+
+set.seed(125)
+
+index = sample(1:nrow(workdata), 5000)
+
+sampledata = workdata[index,]
+
+sampledata = as.data.frame(sampledata)
+
+## Normalize sale_price, total_sqft, garage_sqft. 
+
+sampledata$sale_price = normalize(sampledata$sale_price)
+
+sampledata$total_sqft = normalize(sampledata$total_sqft)
+
+sampledata$garage_sqft = normalize(sampledata$garage_sqft)
+
+
+
+```
+
+
+```{r}
+summary(sampledata)
+
+
+# Creating dummy variables for categorical variables
+
+sampledata = dummy.data.frame(sampledata, c("stories", "num_bedrooms", "full_bathrooms", "half_bathrooms", "garage_type", "has_fireplace", "has_pool", "has_central_cooling", "has_central_heating"))
+
+
+
+```
+
+```{r}
+names(sampledata)
+
+str(sampledata)
+
+## Now we have 31 variables and 2000 observations.
+
+```
+
+
+
+```{r}
+## Model Development 
+
+
+## Training and Validation set
+
+set.seed(125)
+
+training_index = sample(1:nrow(sampledata), nrow(sampledata)*.7)
+
+training = sampledata[training_index,]
+
+testing = sampledata[-training_index,]
+
+```
+
+```{r}
+
+##Decision tree for classification
+
+#Develop Model on training data
+fit_DT = rpart(sale_price ~., data = training, method = "anova")
+
+#Summary of DT model
+summary(fit_DT)
+
+#Lets predict for training data
+pred_DT_train = predict(fit_DT, training[,names(testing) != "sale_price"])
+
+
+#rpart.plot::rpart.plot(fit_DT)
+
+#Lets predict for training data
+pred_DT_test = predict(fit_DT,testing[,names(testing) != "sale_price"])
+
+
+# For training data 
+print(postResample(pred = pred_DT_train, obs = training[,32]))
+
+    #   RMSE       Rsquared    MAE 
+    #   0.1310250  0.4232061   0.1030601 
+
+# For testing data 
+print(postResample(pred = pred_DT_test, obs = testing[,32]))
+
+
+
+
+```
+
+```{r}
+## Linear regression 
+
+#set.seed(125)
+
+#Develop Model on training data
+fit_LR = lm(sale_price ~ ., data = training)
+
+#Summary of LR model
+summary(fit_LR)
+
+#Tune LR model with significant attributes
+#fit_LR = lm(sale_price ~ half_bathrooms0 + total_sqft + garage_sqft + has_fireplace1 + has_pool1 + has_central_heating1 + #has_central_cooling1, data = training)
+
+#summary(fit_LR)
+
+#fit_LR = lm(sale_price ~ total_sqft + garage_sqft + has_fireplace1 + has_pool1 + has_central_heating1 + has_central_cooling1, data = #training)
+
+#summary(fit_LR)
+
+
+#Lets predict for training data
+pred_LR_train = predict(fit_LR, training[,names(testing) != "sale_price"])
+
+#Lets predict for testing data
+pred_LR_test = predict(fit_LR,testing[,names(testing) != "sale_price"])
+
+# For training data 
+print(postResample(pred = pred_LR_train, obs = training[,32]))
+
+
+
+# For testing data 
+print(postResample(pred = pred_LR_test, obs = testing[,32]))
+
+
+
+```
+
+```{r}
+
+## Random Forest
+
+set.seed(125)
+
+#Develop Model on training data
+fit_RF = randomForest(sale_price~., data = training)
+
+#Lets predict for training data
+pred_RF_train = predict(fit_RF, training[,names(testing) != "sale_price"])
+
+#Lets predict for testing data
+pred_RF_test = predict(fit_RF,testing[,names(testing) != "sale_price"])
+
+# For training data 
+print(postResample(pred = pred_RF_train, obs = training[,32]))
+
+
+
+
+# For testing data 
+print(postResample(pred = pred_RF_test, obs = testing[,32]))
+
+
+
+```
+
+```{r}
+## XGBoost
+
+set.seed(125)
+
+#Develop Model on training data
+fit_XGB = gbm(sale_price~., data = training, n.trees = 500, interaction.depth = 2)
+summary(fit_XGB)
+
+#Lets predict for training data
+pred_XGB_train = predict(fit_XGB, training[,names(testing) != "sale_price"], n.trees = 500)
+
+#Lets predict for testing data
+pred_XGB_test = predict(fit_XGB,testing[,names(testing) != "sale_price"], n.trees = 500)
+
+# For training data 
+print(postResample(pred = pred_XGB_train, obs = training[,32]))
+
+
+# For testing data 
+print(postResample(pred = pred_XGB_test, obs = testing[,32]))
+
+
+```
+
+```{r}
+## Dimensionality Reduction using PCA
+
+
+#principal component analysis
+prin_comp = prcomp(training)
+summary(prin_comp)
+
+#compute standard deviation of each principal component
+std_dev = prin_comp$sdev
+
+#compute variance
+pr_var = std_dev^2
+
+#proportion of variance explained
+prop_varex = pr_var/sum(pr_var)
+
+#cumulative scree plot
+plot(cumsum(prop_varex), xlab = "Principal Component",
+     ylab = "Cumulative Proportion of Variance Explained",
+     type = "b")
+
+#add a training set with principal components
+train.data = data.frame(sale_price = training$sale_price, prin_comp$x)
+
+# From the above plot selecting 7 components since it explains almost 80+ % data variance
+train.data =train.data[,1:7]
+
+#transform test into PCA
+test.data = predict(prin_comp, newdata = testing)
+test.data = as.data.frame(test.data)
+
+#select the first 7 components
+test.data=test.data[,1:7]
+```
+
+```{r}
+## Decision tree for classification
+
+#Develop Model on training data
+fit_DT = rpart(sale_price ~., data = train.data, method = "anova")
+summary(fit_DT)
+
+#Lets predict for training data
+pred_DT_train = predict(fit_DT, train.data)
+
+#Lets predict for training data
+pred_DT_test = predict(fit_DT,test.data)
+
+
+# For training data 
+print(postResample(pred = pred_DT_train, obs = training$sale_price))
+
+
+
+# For testing data 
+print(postResample(pred = pred_DT_test, obs = testing$sale_price))
+
+
+
+
+
+```
+
+```{r}
+
+## Linear regression
+
+#Develop Model on training data
+fit_LR = lm(sale_price ~ ., data = train.data)
+summary(fit_LR)
+
+
+#Lets predict for training data
+pred_LR_train = predict(fit_LR, train.data)
+
+#Lets predict for testing data
+pred_LR_test = predict(fit_LR,test.data)
+
+# For training data 
+print(postResample(pred = pred_LR_train, obs = training$sale_price))
+
+
+
+# For testing data 
+print(postResample(pred = pred_LR_test, obs =testing$sale_price))
+
+
+
+```
+
+```{r}
+## Random forest
+
+
+#Develop Model on training data
+fit_RF = randomForest(sale_price~., data = train.data)
+
+
+
+#Lets predict for training data
+pred_RF_train = predict(fit_RF, train.data)
+
+#Lets predict for testing data
+pred_RF_test = predict(fit_RF,test.data)
+
+# For training data 
+print(postResample(pred = pred_RF_train, obs = training$sale_price))
+
+
+# For testing data 
+print(postResample(pred = pred_RF_test, obs = testing$sale_price))
+
+ 
+
+```
+
+```{r}
+
+## XGBoost
+
+#Develop Model on training data
+fit_XGB = gbm(sale_price~., data = train.data, n.trees = 500, interaction.depth = 2)
+
+#Lets predict for training data
+pred_XGB_train = predict(fit_XGB, train.data, n.trees = 500)
+
+#Lets predict for testing data
+pred_XGB_test = predict(fit_XGB,test.data, n.trees = 500)
+
+# For training data 
+print(postResample(pred = pred_XGB_train, obs = training$sale_price))
+
+
+# For testing data 
+print(postResample(pred = pred_XGB_test, obs = testing$sale_price))
+
+
+
+
+```
+
+
+```{r}
+## In this section I will try to predict city from sale_price.
+
+cityhomes = as.data.frame(table(inputdata$city))
+
+citydata = data.frame(sale_price = inputdata$sale_price, total_sqft = inputdata$total_sqft, garage_sqft = inputdata$garage_sqft,                       city = inputdata$city)
+
+str(citydata)
+
+citydata = aggregate(citydata[, -4], by = list(citydata$city), FUN = median)
+
+str(citydata)
+
+citydata
+
+names(citydata)[1] <- "city"
+
+summary(citydata[,-1])
+
+citydata$sale_price = normalize(citydata$sale_price)
+
+citydata$total_sqft = normalize(citydata$total_sqft)
+
+citydata$garage_sqft = normalize(citydata$garage_sqft)
+
+summary(citydata)
+
+```
+
+
+```{r}
+
+## KNN classification
+
+row.names(citydata) <- citydata$city
+          
+citydata = citydata[,-1]
+
+citydata
+
+
+k2 = kmeans(citydata, centers = 2, nstart = 25)
+
+#k2 
+#str(k2)
+
+
+fviz_cluster(k2, data = citydata)
+
+
+
+k3 <- kmeans(citydata, centers = 3, nstart = 25)
+k4 <- kmeans(citydata, centers = 4, nstart = 25)
+k5 <- kmeans(citydata, centers = 5, nstart = 25)
+
+# plots to compare
+p1 <- fviz_cluster(k2, geom = "point", data = citydata) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point",  data = citydata) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point",  data = citydata) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point",  data = citydata) + ggtitle("k = 5")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+
+
+set.seed(125)
+
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(citydata, k, nstart = 10 )$tot.withinss
+}
+
+# Compute and plot wss for k = 1 to k = 15
+k.values <- 1:15
+
+# extract wss for 2-15 clusters
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares")
+
+
+
+set.seed(125)
+
+fviz_nbclust(citydata, kmeans, method = "wss")
+
+# Compute k-means clustering with k = 4
+set.seed(125)
+final <- kmeans(citydata, 5, nstart = 25)
+print(final)
+
+fviz_cluster(final, data = citydata)
+
+citydata %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+
+```
+
+
+
+########################### End of Analysis #################################
+```
